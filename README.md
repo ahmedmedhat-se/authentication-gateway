@@ -1,17 +1,18 @@
 # Authentication Gateway
 A standalone identity & token-issuance service built with **NestJS (Express adapter)**, **TypeScript**, **PostgreSQL**, **Prisma**, **JWT**, and **bcrypt**.
 
-> Developed by **Ahmed Medhat**, **Ahmed Tarek** & **Lucas Monir**
+> Developed by **Ahmed Medhat**
 
-**Project type:** Full-Stack Web Application
+**Project type:** Web Application
 **License:** Proprietary — All rights reserved
 
 ---
 ## Table of Contents
-1. [System Context](#system-context)
-2. [Component Architecture](#component-architecture)
-3. [Request Lifecycle](#request-lifecycle)
-4. [Workflows](#workflows)
+1. [Getting Started](#getting-started)
+2. [System Context](#system-context)
+3. [Component Architecture](#component-architecture)
+4. [Request Lifecycle](#request-lifecycle)
+5. [Workflows](#workflows)
    - [User Registration](#1-user-registration)
    - [Email Verification](#2-email-verification)
    - [Login](#3-login)
@@ -24,17 +25,119 @@ A standalone identity & token-issuance service built with **NestJS (Express adap
    - [Rate Limiting](#10-rate-limiting)
    - [Audit Logging](#11-audit-logging)
    - [Health Check](#12-health-check)
-5. [Database Design](#database-design)
-6. [Security Boundaries](#security-boundaries)
+6. [Database Design](#database-design)
+7. [Security Boundaries](#security-boundaries)
    - [Trust Boundaries](#trust-boundaries)
-7. [License](#license)
+8. [License](#license)
+
+---
+## Getting Started
+### Prerequisites
+- Node.js 18+ and npm
+- PostgreSQL 14+ running locally or accessible via connection string
+- Nest CLI (installed via `npx` below, no global install required)
+
+### 1. Project Scaffolding
+```bash
+npx @nestjs/cli new auth-gateway
+cd auth-gateway
+```
+
+### 2. Core Dependencies
+```bash
+# Configuration (validated environment variables)
+npm install @nestjs/config joi
+
+# JWT (official NestJS package)
+npm install @nestjs/jwt
+
+# Rate limiting (official NestJS package)
+npm install @nestjs/throttler
+
+# Password hashing
+npm install bcrypt
+npm install -D @types/bcrypt
+
+# Request validation (DTOs, whitelisting)
+npm install class-validator class-transformer
+
+# Security headers
+npm install helmet
+
+# Mailer (verification & password-reset emails)
+npm install nodemailer
+```
+
+### 3. Prisma + PostgreSQL
+```bash
+# Prisma CLI (dev dependency) and Client (runtime)
+npm install -D prisma
+npm install @prisma/client
+
+# Initialize Prisma with a PostgreSQL datasource
+npx prisma init --datasource-provider postgresql
+```
+
+### 4. Testing Dependencies
+```bash
+npm install -D jest supertest @types/supertest ts-jest
+```
+
+### 5. Environment Configuration
+Create `.env` for local development:
+
+```bash
+cat > .env <<'EOF'
+NODE_ENV=development
+PORT=3000
+DATABASE_URL=postgresql://auth_gateway:local_dev_password@localhost:5432/auth_gateway_dev?schema=public
+JWT_SECRET=CHANGE_ME_GENERATE_RANDOM
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+BCRYPT_COST=12
+CORS_ORIGINS=http://localhost:3001
+MAIL_DRIVER=fake
+MAIL_FROM="Auth Gateway <no-reply@auth-gateway.local>"
+EOF
+```
+
+Create `.env.example` for version control (no secrets committed):
+
+```bash
+cat > .env.example <<'EOF'
+NODE_ENV=development
+PORT=3000
+DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/auth_gateway_dev?schema=public
+JWT_SECRET=
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+BCRYPT_COST=12
+CORS_ORIGINS=http://localhost:3001
+MAIL_DRIVER=fake
+MAIL_FROM=
+EOF
+```
+
+Generate a real JWT secret and set it as `JWT_SECRET` in `.env`:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
+
+### 6. Run the Project
+
+```bash
+npm run start:dev
+```
+
+The API is available at `http://localhost:3000`.
 
 ---
 ## System Context
 ![System Context](./public/designs/system-context.png)
 
 ### Module Map
-**Modules are organized by domain responsibility, not by technical layer. Each module owns its data and exposes a narrow public API.**
+Modules are organized by domain responsibility, not by technical layer. Each module owns its data and exposes a narrow public API.
 
 ![Module Map](./public/designs/module-map.png)
 
@@ -283,14 +386,11 @@ flowchart LR
 ## Database Design
 ![Authentication Flow](./db/erd.png)
 
-```ts
-Cardinality notes:
-
-1. User ↔ Role is many-to-many (a user can have multiple roles; a role many users).
+**Cardinality notes:**
+1. User ↔ Role is many-to-many (a user can have multiple roles; a role can belong to many users).
 2. Role ↔ Permission is many-to-many.
-3. User → tokens is one-to-many.
-4. User → audit is one-to-many (nullable for anonymous events like failed login on unknown email).
-```
+3. User → Tokens is one-to-many.
+4. User → AuditLog is one-to-many (nullable for anonymous events, e.g. a failed login on an unknown email).
 
 ---
 ## Security Boundaries
@@ -299,17 +399,14 @@ Cardinality notes:
 ### Trust Boundaries
 ![Trust Boundaries](./public/designs/security/trust-boundaries.png)
 
-```ts
-Controls at each boundary:
-
-1. Client → Edge: TLS (prod), security headers, CORS allowlist, body size limit.
-2. Edge → Guards: token verification with pinned algorithm; rate limiting before any expensive work.
-3. Guards → Services: authorization enforced before business logic runs.
-4. Pipes → Services: whitelist DTOs, reject unknown fields (mass-assignment defense).
-5. Services → DB: Prisma parameterization; least-privilege DB user.
-6. App → Secrets: env vars via Config module; never logged.
-7. App → Logs: structured, sanitized; never tokens/passwords.
-```
+**Controls at each boundary:**
+1. **Client → Edge:** TLS (production), security headers, CORS allowlist, body size limit.
+2. **Edge → Guards:** token verification with pinned algorithm; rate limiting before any expensive work.
+3. **Guards → Services:** authorization enforced before business logic runs.
+4. **Pipes → Services:** whitelist DTOs, reject unknown fields (mass-assignment defense).
+5. **Services → DB:** Prisma parameterization; least-privilege DB user.
+6. **App → Secrets:** environment variables via Config module; never logged.
+7. **App → Logs:** structured, sanitized; never tokens or passwords.
 
 ---
 ## License
