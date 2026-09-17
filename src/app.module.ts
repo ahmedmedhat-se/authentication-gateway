@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { validationSchema } from './config/validation.schema';
 import { HasherModule } from './hasher/hasher.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
@@ -10,6 +11,7 @@ import { HasherModule } from './hasher/hasher.module';
       validationSchema,
       cache: true,
     }),
+    PrismaModule,
     HasherModule,
   ],
 })
