@@ -41,6 +41,20 @@ export class UserService {
     });
   }
 
+  async assignDefaultRole(userId: string): Promise<void> {
+    const role = await this.prisma.role.findUnique({
+      where: { name: 'user' },
+    });
+
+    if (!role) {
+      throw new Error('Default role "user" not found. Run prisma db seed.');
+    }
+
+    await this.prisma.userRole.create({
+      data: { userId, roleId: role.id },
+    });
+  }
+
   private normalizeEmail(email: string): string {
     return email.trim().toLowerCase();
   }
