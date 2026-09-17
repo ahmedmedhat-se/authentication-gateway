@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { validationSchema } from './config/validation.schema';
+import { HasherModule } from './hasher/hasher.module';
 
 @Module({
   imports: [
@@ -9,6 +10,7 @@ import { validationSchema } from './config/validation.schema';
       validationSchema,
       cache: true,
     }),
+    HasherModule,
   ],
 })
 export class AppModule {}
