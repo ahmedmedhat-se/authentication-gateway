@@ -9,10 +9,11 @@ A standalone identity & token-issuance service built with **NestJS (Express adap
 ---
 ## Table of Contents
 1. [Getting Started](#getting-started)
-2. [System Context](#system-context)
-3. [Component Architecture](#component-architecture)
-4. [Request Lifecycle](#request-lifecycle)
-5. [Workflows](#workflows)
+2. [Recent Progress](#recent-progress)
+3. [System Context](#system-context)
+4. [Component Architecture](#component-architecture)
+5. [Request Lifecycle](#request-lifecycle)
+6. [Workflows](#workflows)
    - [User Registration](#1-user-registration)
    - [Email Verification](#2-email-verification)
    - [Login](#3-login)
@@ -25,10 +26,10 @@ A standalone identity & token-issuance service built with **NestJS (Express adap
    - [Rate Limiting](#10-rate-limiting)
    - [Audit Logging](#11-audit-logging)
    - [Health Check](#12-health-check)
-6. [Database Design](#database-design)
-7. [Security Boundaries](#security-boundaries)
+7. [Database Design](#database-design)
+8. [Security Boundaries](#security-boundaries)
    - [Trust Boundaries](#trust-boundaries)
-8. [License](#license)
+9. [License](#license)
 
 ---
 ## Getting Started
@@ -131,6 +132,36 @@ npm run start:dev
 ```
 
 The API is available at `http://localhost:3000`.
+
+---
+## Recent Progress
+### Modules Completed
+1. **Config** — Joi validation for environment variables. App fails to boot on missing `DATABASE_URL` or short `JWT_SECRET`.
+2. **Hasher** — bcrypt wrapper. Async only, cost from Config, `compare()` never throws on malformed input.
+3. **Prisma** — `PrismaService` and `User` model. Downgraded to Prisma 6.19.3 (v7 had breaking changes). Initial migration applied.
+4. **User** — `UserService` with five methods: `findByEmail`, `findById`, `create`, `updatePassword`, `markVerified`. Email normalization inside the service. No controller (no HTTP surface).
+
+### Test Status
+4 suites, 19 tests, all passing. Lint clean.
+
+### Problems Fixed
+- `@nestjs/config` ESM/peer-dep issues → upgraded to v4
+- Prisma 7 breaking changes → downgraded to v6
+- Postgres auth failure → used `postgres` superuser in `.env`
+- ESLint `no-floating-promises`, `no-unsafe-*`, Jest mock typing → fixed
+
+### Not Built Yet
+Auth module, TokenService, Mailer, AuditService, RBAC, rate limiting, health checks, docs, E2E auth tests.
+
+### SDLC Framework
+**Iterative & incremental with vertical slices, risk-aware.** Each module is designed, built, tested, security-reviewed, and documented before the next begins. Quality gates are enforced at each step: design gate before code, implementation gate per step, security gate on anything touching auth or tokens, and test gate requiring at least one meaningful test per behavior.
+
+### Git State
+Completed features:
+- `feat/config-module`
+- `feat/hasher-module`
+- `feat/prisma-module`
+- `feat/user-module`
 
 ---
 ## System Context
