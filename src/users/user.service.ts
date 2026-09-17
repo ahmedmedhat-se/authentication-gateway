@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { User } from '@prisma/client';
 
 @Injectable()
 export class UserService {
@@ -27,8 +27,12 @@ export class UserService {
     });
   }
 
-  async updatePassword(userId: string, passwordHash: string): Promise<void> {
-    await this.prisma.user.update({
+  async updatePassword(
+    userId: string,
+    passwordHash: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<void> {
+    await client.user.update({
       where: { id: userId },
       data: { passwordHash },
     });
@@ -38,20 +42,6 @@ export class UserService {
     await this.prisma.user.update({
       where: { id: userId },
       data: { emailVerified: true },
-    });
-  }
-
-  async assignDefaultRole(userId: string): Promise<void> {
-    const role = await this.prisma.role.findUnique({
-      where: { name: 'user' },
-    });
-
-    if (!role) {
-      throw new Error('Default role "user" not found. Run prisma db seed.');
-    }
-
-    await this.prisma.userRole.create({
-      data: { userId, roleId: role.id },
     });
   }
 
