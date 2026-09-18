@@ -1,23 +1,38 @@
 # Authentication Gateway
-A standalone identity & token-issuance service built with **NestJS (Express adapter)**, **TypeScript**, **PostgreSQL**, **Prisma**, **JWT**, and **bcrypt**.
+
+A standalone identity and token-issuance service built with **NestJS 11 (Express adapter)**, **TypeScript**, **PostgreSQL**, **Prisma**, **JWT**, and **bcrypt**.
 
 > Developed by **Ahmed Medhat**
 
-**Project type:** Web Application
+**Project type:** Web application (university capstone)
 **License:** Proprietary — All rights reserved
 
 ---
 ## Table of Contents
-1. [Getting Started](#getting-started)
-2. [Recent Progress](#recent-progress)
-3. [Project Structure](#project-structure)
-4. [Tech Stack](#tech-stack)
-5. [API Endpoints](#api-endpoints)
-6. [Security Model](#security-model)
-7. [System Context](#system-context)
-8. [Component Architecture](#component-architecture)
-9. [Request Lifecycle](#request-lifecycle)
-10. [Workflows](#workflows)
+1. [Overview](#overview)
+2. [SDLC Framework](#sdlc-framework)
+3. [Design Phases](#design-phases)
+4. [Project Status](#project-status)
+5. [Getting Started](#getting-started)
+   - [Prerequisites](#prerequisites)
+   - [Setup](#setup)
+   - [Environment Variables](#environment-variables)
+   - [Scripts](#scripts)
+6. [Project Structure](#project-structure)
+7. [Tech Stack](#tech-stack)
+8. [Architecture](#architecture)
+   - [System Context](#system-context)
+   - [Module Map](#module-map)
+   - [Component Architecture](#component-architecture)
+   - [Request Lifecycle](#request-lifecycle)
+9. [API Design](#api-design)
+   - [API Endpoints](#api-endpoints)
+10. [Database Design](#database-design)
+11. [Security Design](#security-design)
+    - [Security Model](#security-model)
+    - [Cross-Cutting Concerns](#cross-cutting-concerns)
+    - [Trust Boundaries](#trust-boundaries)
+12. [Workflows](#workflows)
     - [User Registration](#1-user-registration)
     - [Email Verification](#2-email-verification)
     - [Login](#3-login)
@@ -30,104 +45,80 @@ A standalone identity & token-issuance service built with **NestJS (Express adap
     - [Rate Limiting](#10-rate-limiting)
     - [Audit Logging](#11-audit-logging)
     - [Health Check](#12-health-check)
-11. [Database Design](#database-design)
-12. [Security Boundaries](#security-boundaries)
-    - [Trust Boundaries](#trust-boundaries)
-13. [License](#license)
+13. [Testing](#testing)
+14. [License](#license)
 
 ---
+## Overview
+The Authentication Gateway is a complete, self-contained identity and token-issuance service: registration, login, refresh-token rotation with reuse detection, logout, password change, email verification, password reset, JWT and RBAC authorization, rate limiting, audit logging, a standard error envelope, security headers, CORS, and health checks. All code compiles, lint is clean, and the full test suite passes.
+
+It is a learning project for backend engineering, not a production identity provider. Docker, Redis, Argon2, Swagger/OpenAPI, CI/CD, and a microservices split are deliberately out of scope so the project stays focused on application-level design.
+
+## SDLC Framework
+**Iterative and incremental development using vertical slices, executed with a risk-first mindset and enforced by quality gates.** Each feature was designed, implemented, tested, security-reviewed, and documented before the next began — no phase was skipped because the previous one "looked finished."
+
+This framework was chosen over the alternatives considered: Waterfall (too rigid, pushes security and testing to the end), Scrum (built for teams; ceremony overhead not justified for a solo project), Spiral (too much risk-analysis documentation for this scale), V-Model (too linear for exploratory backend work), and Kanban (optimized for steady-state operations, not a greenfield build).
+
+## Design Phases
+Before writing code, seven design phases were completed: Discovery and Scope, SDLC Planning, System Design, Architecture, Database Design, API Design, and Security Design. Key decisions from those phases that every later step inherited:
+
+- **Architecture** — modular monolith. Domain modules (Auth, User, Token, Role, Audit, Health) plus infrastructure modules (Prisma, Mailer, Config, Hasher). Dependencies point inward; controllers stay thin; services own business logic.
+- **Database** — nine models with explicit keys, constraints, indexes, and foreign-key behaviors. Token tables store hashes only. Audit rows survive user deletion via `SET NULL`.
+- **API** — versioned under `/api/v1`. Standard error envelope with a stable error code and a `requestId`. Auth actions grouped under `/auth`. No `/users/:id` route — ID-based user lookup by another user is impossible by design.
+- **Security** — threat model built with STRIDE and mapped against the OWASP Top 10; every control follows a threat → vulnerability → mitigation → implementation chain.
+
+## Project Status
+| Area | Status |
+|---|---|
+| Config module (Joi validation, fail-fast boot) | Done |
+| Hasher module (bcrypt wrapper) | Done |
+| Prisma module (typed client, connection lifecycle) | Done |
+| Mailer module (port with fake and SMTP adapters) | Done |
+| Audit module (append-only security event log) | Done |
+| Token module (access + refresh, rotation, family revocation) | Done |
+| User module (UserService, email normalization) | Done |
+| Role module (roles, permissions, admin operations) | Done |
+| Auth endpoints (register, login, refresh, logout, change-password, verify-email, forgot-password, reset-password) | Done |
+| JWT auth guard (global, opt-out via `@Public()`) | Done |
+| RBAC permissions guard (opt-in via `@RequirePermission`) | Done |
+| Email-verified guard (opt-in via `@RequireVerifiedEmail`) | Done |
+| `GET /users/me` | Done |
+| Admin role endpoints (list, assign, revoke, last-admin protection) | Done |
+| Health checks (`/live`, `/ready`) | Done |
+| Rate limiting (strict on register / forgot-password) | Done |
+| Global exception filter (standard error envelope) | Done |
+| Security headers (helmet) | Done |
+| CORS allowlist | Done |
+| Request-ID interceptor (log correlation) | Done |
+| Full `docs/` folder with ADRs | Not started |
+
 ## Getting Started
 ### Prerequisites
-- Node.js 18+ and npm
-- PostgreSQL 14+ running locally or accessible via connection string
-- Nest CLI (installed via `npx` below, no global install required)
+- Node.js 20+ and npm
+- PostgreSQL 15+ running locally or accessible via connection string
 
-### 1. Project Scaffolding
+### Setup
 ```bash
-npx @nestjs/cli new auth-gateway
-cd auth-gateway
-```
+# 1. Clone the repository
+git clone <repository-url>
+cd authentication-gateway
 
-### 2. Core Dependencies
-```bash
-# Configuration (validated environment variables)
-npm install @nestjs/config joi
+# 2. Install dependencies
+npm install
 
-# JWT (official NestJS package)
-npm install @nestjs/jwt
+# 3. Copy the environment template and fill in DATABASE_URL and JWT_SECRET
+cp .env.example .env
 
-# Rate limiting (official NestJS package)
-npm install @nestjs/throttler
-
-# Password hashing
-npm install bcrypt
-npm install -D @types/bcrypt
-
-# Request validation (DTOs, whitelisting)
-npm install class-validator class-transformer
-
-# Security headers
-npm install helmet
-
-# Mailer (verification & password-reset emails)
-npm install nodemailer
-```
-
-### 3. Prisma + PostgreSQL
-```bash
-# Prisma CLI (dev dependency) and Client (runtime)
-npm install -D prisma
-npm install @prisma/client
-
-# Initialize Prisma with a PostgreSQL datasource
-npx prisma init --datasource-provider postgresql
-```
-
-### 4. Testing Dependencies
-```bash
-npm install -D jest supertest @types/supertest ts-jest
-```
-
-### 5. Environment Configuration
-Create `.env` for local development:
-```bash
-cat > .env <<'EOF'
-NODE_ENV=development
-PORT=3000
-DATABASE_URL=postgresql://auth_gateway:local_dev_password@localhost:5432/auth_gateway_dev?schema=public
-JWT_SECRET=CHANGE_ME_GENERATE_RANDOM
-JWT_ACCESS_EXPIRES_IN=15m
-JWT_REFRESH_EXPIRES_IN=7d
-BCRYPT_COST=12
-CORS_ORIGINS=http://localhost:3001
-MAIL_DRIVER=fake
-MAIL_FROM="Auth Gateway <no-reply@auth-gateway.local>"
-EOF
-```
-
-Create `.env.example` for version control (no secrets committed):
-```bash
-cat > .env.example <<'EOF'
-NODE_ENV=development
-PORT=3000
-DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/auth_gateway_dev?schema=public
-JWT_SECRET=
-JWT_ACCESS_EXPIRES_IN=15m
-JWT_REFRESH_EXPIRES_IN=7d
-BCRYPT_COST=12
-CORS_ORIGINS=http://localhost:3001
-MAIL_DRIVER=fake
-MAIL_FROM=
-EOF
-```
-
-Generate a real JWT secret and set it as `JWT_SECRET` in `.env`:
-```bash
+# 4. Generate a JWT secret and paste it into .env
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
-```
 
-### 6. Run the Project
-```bash
+# 5. Apply database migrations
+npx prisma migrate dev
+
+# 6. (Optional) Seed reference/test data
+npx ts-node prisma/seed.ts
+
+# 7. Start the development server
 npm run start:dev
 ```
 
@@ -147,183 +138,178 @@ The API is available at `http://localhost:3000`.
 | MAIL_DRIVER | no | fake or smtp. Defaults to fake. |
 | MAIL_FROM | no | Sender address for outgoing email. |
 
----
-## Recent Progress
-### Status
-| Component | Status |
+### Scripts
+| Script | Description |
 |---|---|
-| Config module (Joi env validation) | Done |
-| Hasher module (bcrypt wrapper) | Done |
-| Prisma module (PrismaService) | Done |
-| User module (UserService) | Done |
-| Token module (issue, verify, rotate, revoke) | Done |
-| Audit module (security event logging) | Done |
-| Role module (RBAC roles & permissions) | Done |
-| Auth module (register, login, refresh, logout, change-password, verify-email) | Done |
-| JWT auth guard | Done |
-| Permissions guard (RBAC) | Done |
-| Health module | Done |
-| Security headers (helmet) | Done |
-| CORS allowlist | Done |
-| Mailer module (fake + SMTP adapters) | Done |
-| `GET /users/me` | Not started |
-| Admin role endpoints | Not started |
-| Rate limiting | Not started |
-| Forgot password / reset password | Not started |
-| Global exception filter (standard error envelope) | Not started |
-| Full `docs/` folder with ADRs | Not started |
+| build | Compile the project with `nest build`. |
+| format | Format `src/` and `test/` with Prettier. |
+| start | Run the compiled application. |
+| start:dev | Run the application in watch mode. |
+| start:debug | Run in watch mode with the Node debugger attached. |
+| start:prod | Run the production build (`dist/main`). |
+| lint | Run ESLint with autofix. |
+| test | Run unit tests. |
+| test:watch | Run unit tests in watch mode. |
+| test:cov | Run unit tests with coverage. |
+| test:debug | Run unit tests with the Node debugger attached. |
+| test:e2e | Run end-to-end tests (`test/jest-e2e.json`). |
 
-### What was built
-The authentication module is in place: register, login, refresh with rotation and reuse detection, logout, change-password, and verify-email. On top of it: a JWT auth guard and RBAC permissions guard, a Role module, a Token module, an Audit module, a Mailer module with fake and SMTP adapters, a Health module, security headers via helmet, and a CORS allowlist.
+Prisma commands (`migrate dev`, `generate`, `studio`) are run directly with `npx prisma <command>`; there are no npm script wrappers for them.
 
-The Prisma schema now includes `User`, `Role`, `Permission`, `UserRole`, `RolePermission`, `RefreshToken`, `EmailVerificationToken`, `PasswordResetToken`, and `AuditLog`.
-
-### Test Status
-Unit tests: 4 suites, 19 tests, all passing (Config, Hasher, User). Lint clean.
-End-to-end tests: every auth endpoint (register, login, refresh, logout, change-password, verify-email) is covered and passing, alongside a dedicated security spec.
-
-### Problems Fixed
-- `@nestjs/config` ESM/peer-dep issues → upgraded to v4
-- Prisma 7 breaking changes → downgraded to v6
-- Postgres auth failure → used `postgres` superuser in `.env`
-- ESLint `no-floating-promises`, `no-unsafe-*`, Jest mock typing → fixed
-
-### SDLC Framework
-**Iterative & incremental with vertical slices, risk-aware.** Each module is designed, built, tested, security-reviewed, and documented before the next begins. Quality gates are enforced at each step: design gate before code, implementation gate per step, security gate on anything touching auth or tokens, and test gate requiring at least one meaningful test per behavior.
-
-### Git State
-Completed features:
-- `feat/config-module`
-- `feat/hasher-module`
-- `feat/prisma-module`
-- `feat/user-module`
-
----
 ## Project Structure
 ```bash
-src/
-  auth/
-    decorators/
-      current-user.decorator.ts
-      public.decorator.ts
-      require-permission.decorator.ts
-    dto/
-      change-password.dto.ts
-      login.dto.ts
-      logout.dto.ts
-      refresh.dto.ts
-      register.dto.ts
-      verify-email.dto.ts
-    guards/
-      jwt-auth.guard.ts
-      permissions.guard.ts
-    strategies/
-      jwt.strategy.ts
-    types/
-      authenticated-user.ts
-    auth.controller.ts
-    auth.module.ts
-    auth.service.ts
-  audit/
-    audit-event.enum.ts
-    audit.module.ts
-    audit.service.ts
-  common/
-    config/
-      cors.config.ts
-    middleware/
-      security-headers.middleware.ts
-    types/
-      request-context.ts
-  config/
-    validation.schema.ts
-    validation.schema.spec.ts
-  hasher/
-    hasher.module.ts
-    hasher.service.ts
-    hasher.service.spec.ts
-  health/
-    health.controller.ts
-    health.module.ts
-    health.service.ts
-  mailer/
-    fake-mailer.adapter.ts
-    mailer.module.ts
-    mailer.port.ts
-    smtp-mailer.adapter.ts
-  prisma/
-    prisma.module.ts
-    prisma.service.ts
-  role/
-    role.module.ts
-    role.service.ts
-  token/
-    token.module.ts
-    token.service.ts
-  users/
-    user.module.ts
-    user.service.ts
-    user.service.spec.ts
-  app.module.ts
-  main.ts
-prisma/
-  schema.prisma
-  seed.ts
-  migrations/
-test/
-  auth-change-password.e2e-spec.ts
-  auth-login.e2e-spec.ts
-  auth-logout.e2e-spec.ts
-  auth-refresh.e2e-spec.ts
-  auth-verify-email.e2e-spec.ts
-  auth.e2e-spec.ts
-  security.e2e-spec.ts
+authentication-gateway/
+├── .env
+├── .env.example
+├── package.json
+├── tsconfig.json
+│
+├── prisma/
+│   ├── schema.prisma
+│   ├── seed.ts
+│   └── migrations/
+│       ├── 20260917085801_init/
+│       └── 20260917163916_add_auth_models/
+│
+├── public/
+│   ├── db/
+│   │   └── erd.png
+│   └── designs/
+│       ├── component-architecture.png
+│       ├── module-map.png
+│       ├── request-lifecycle.png
+│       ├── system-context.png
+│       ├── auth/
+│       │   ├── authorization-flow (rbac).png
+│       │   └── logout-sequence.png
+│       └── security/
+│           ├── security-boundaries.png
+│           └── trust-boundaries.png
+│
+├── src/
+│   ├── main.ts
+│   ├── app.module.ts
+│   ├── app.controller.ts
+│   ├── app.service.ts
+│   │
+│   ├── audit/
+│   │   ├── audit-event.enum.ts
+│   │   ├── audit.module.ts
+│   │   └── audit.service.ts
+│   │
+│   ├── auth/
+│   │   ├── auth.controller.ts
+│   │   ├── auth.module.ts
+│   │   ├── auth.service.ts
+│   │   ├── decorators/
+│   │   │   ├── current-user.decorator.ts
+│   │   │   ├── public.decorator.ts
+│   │   │   ├── require-permission.decorator.ts
+│   │   │   └── require-verified-email.decorator.ts
+│   │   ├── dto/
+│   │   │   ├── change-password.dto.ts
+│   │   │   ├── forgot-password.dto.ts
+│   │   │   ├── login.dto.ts
+│   │   │   ├── logout.dto.ts
+│   │   │   ├── refresh.dto.ts
+│   │   │   ├── register.dto.ts
+│   │   │   ├── reset-password.dto.ts
+│   │   │   └── verify-email.dto.ts
+│   │   ├── guards/
+│   │   │   ├── email-verified.guard.ts
+│   │   │   ├── jwt-auth.guard.ts
+│   │   │   └── permissions.guard.ts
+│   │   ├── strategies/
+│   │   │   └── jwt.strategy.ts
+│   │   └── types/
+│   │       └── authenticated-user.ts
+│   │
+│   ├── common/
+│   │   ├── config/cors.config.ts
+│   │   ├── decorators/throttle.decorators.ts
+│   │   ├── filters/http-exception.filter.ts
+│   │   ├── interceptors/request-id.interceptor.ts
+│   │   ├── middleware/security-headers.middleware.ts
+│   │   └── types/request-context.ts
+│   │
+│   ├── config/
+│   │   └── validation.schema.ts
+│   │
+│   ├── hasher/
+│   │   └── hasher.service.ts
+│   │
+│   ├── health/
+│   │   ├── health.controller.ts
+│   │   ├── health.module.ts
+│   │   └── health.service.ts
+│   │
+│   ├── mailer/
+│   │   ├── fake-mailer.adapter.ts
+│   │   ├── mailer.module.ts
+│   │   ├── mailer.port.ts
+│   │   └── smtp-mailer.adapter.ts
+│   │
+│   ├── prisma/
+│   │   ├── prisma.module.ts
+│   │   └── prisma.service.ts
+│   │
+│   ├── role/
+│   │   ├── admin.controller.ts
+│   │   ├── role.module.ts
+│   │   ├── role.service.ts
+│   │   └── dto/
+│   │       ├── assign-role.dto.ts
+│   │       └── revoke-role.dto.ts
+│   │
+│   ├── token/
+│   │   ├── token.module.ts
+│   │   └── token.service.ts
+│   │
+│   └── users/
+│       ├── user.controller.ts
+│       ├── user.module.ts
+│       └── user.service.ts
+│
+└── test/
+    ├── jest-e2e.json
+    ├── admin-roles.e2e-spec.ts
+    ├── auth.e2e-spec.ts
+    ├── auth-change-password.e2e-spec.ts
+    ├── auth-email-verified.e2e-spec.ts
+    ├── auth-login.e2e-spec.ts
+    ├── auth-logout.e2e-spec.ts
+    ├── auth-password-reset.e2e-spec.ts
+    ├── auth-refresh.e2e-spec.ts
+    ├── auth-users-me.e2e-spec.ts
+    ├── auth-verify-email.e2e-spec.ts
+    └── security.e2e-spec.ts
 ```
 
----
+`.spec.ts` files colocated with their source (unit tests) are omitted above for readability; see [Testing](#testing) for coverage.
+
 ## Tech Stack
-- NestJS (Express adapter)
-- TypeScript
-- PostgreSQL
-- Prisma 6
-- JWT, signed with HS256, verified via Passport 10 (JWT strategy)
-- bcrypt
-- Joi (environment validation)
-- helmet (security headers)
-- Nodemailer (SMTP adapter)
-- Jest + Supertest
+| Layer | Choice |
+|---|---|
+| Framework | NestJS 11, Express adapter |
+| Language | TypeScript 5 (strict mode) |
+| Database | PostgreSQL 15 |
+| ORM | Prisma 6 |
+| Auth | `@nestjs/jwt` 11, Passport 10, `passport-jwt` |
+| Password hashing | bcrypt |
+| Config validation | Joi |
+| Security headers | helmet |
+| Rate limiting | `@nestjs/throttler` 6 |
+| Email | Nodemailer (fake adapter for dev/test, SMTP adapter for real delivery) |
+| Validation | class-validator, class-transformer |
+| Testing | Jest, Supertest |
+| Tooling | ESLint, Prettier, Git with Conventional Commits |
 
----
-## API Endpoints
-| Method | Path | Auth required | Status | Description |
-|---|---|---|---|---|
-| POST | /auth/register | no | Done | Register a new user. |
-| POST | /auth/login | no | Done | Authenticate and issue an access/refresh token pair. |
-| POST | /auth/refresh | no (valid refresh token required) | Done | Rotate the refresh token and issue a new access token. Reuse of a revoked token revokes the whole token family. |
-| POST | /auth/logout | yes | Done | Revoke the current refresh token. |
-| PATCH | /auth/change-password | yes | Done | Change the authenticated user's password and revoke existing refresh tokens. |
-| GET | /auth/verify-email | no (verification token required) | Done | Verify email ownership via a single-use token. |
-| GET | /health/live | no | Done | Liveness probe. |
-| GET | /health/ready | no | Done | Readiness probe, includes database connectivity check. |
-| GET | /users/me | yes | Not started | Return the authenticated user's profile. |
-| Admin role/permission endpoints | yes (admin) | Not started | Manage roles and permissions. |
+Excluded by design: Docker, Redis, Argon2, Swagger/OpenAPI, CI/CD, microservices.
 
-Paths reflect the controllers listed under "Project Structure." Confirm exact route strings in `auth.controller.ts` and `health.controller.ts` if the source has diverged.
+## Architecture
+The system is a **modular monolith**. Domain modules (Auth, User, Token, Role, Audit, Health) sit alongside infrastructure modules (Prisma, Mailer, Config, Hasher). Dependencies point inward — controllers depend on services, services depend on Prisma — and never the reverse. Controllers stay thin; services own business logic. Cross-cutting concerns (validation, authentication, authorization, error handling) use NestJS primitives: guards, pipes, interceptors, and filters.
 
----
-## Security Model
-- Passwords are hashed with bcrypt; cost factor is configurable and validated at startup.
-- Access tokens are JWTs signed with HS256, verified through a Passport JWT strategy — no database round-trip on the hot path.
-- Refresh tokens are stored hashed, never in plain text, and rotated on every use.
-- Reuse of an already-revoked refresh token revokes the entire token family for that user, forcing re-authentication.
-- A global JWT auth guard protects routes by default; routes are opted out explicitly, not opted in.
-- Authorization is enforced by a permissions guard (RBAC) that runs after authentication and before the route handler.
-- Security-relevant events (login, logout, password change, email verification, refresh failures) are written to an audit log.
-- HTTP responses include security headers via helmet.
-- Cross-origin requests are restricted to an explicit allowlist (`CORS_ORIGINS`).
-
----
-## System Context
+### System Context
 ![System Context](./public/designs/system-context.png)
 
 ### Module Map
@@ -331,31 +317,102 @@ Modules are organized by domain responsibility, not by technical layer. Each mod
 
 ![Module Map](./public/designs/module-map.png)
 
----
-## Component Architecture
+### Component Architecture
 ![Component Architecture](./public/designs/component-architecture.png)
 
 **Module responsibilities:**
 | Module | Responsibility |
 |---|---|
-| Auth Module | Orchestrates registration, login, refresh, logout use cases |
-| User Module | Profile read, password change |
-| Token Module | Signs/verifies JWTs, manages refresh-token records, rotation & revocation |
-| Mail Module | Sends verification & password-reset emails (delegates to provider) |
-| Audit Module | Persists security-relevant events (login success/failure, password change, etc.) |
+| Auth Module | Orchestrates registration, login, refresh, logout, password, and verification use cases |
+| User Module | Profile read (`GET /users/me`) |
+| Role Module | Roles, permissions, and admin role management |
+| Token Module | Signs/verifies JWTs; manages refresh-token records, rotation, and family revocation |
+| Mailer Module | Sends verification, password-reset, and other transactional email (fake or SMTP) |
+| Audit Module | Persists security-relevant events (login, logout, password change, etc.) |
 | Health Module | Liveness/readiness checks, DB connectivity probe |
-| Guards | `JwtAuthGuard` (authentication), `RolesGuard` (authorization) |
+| Guards | `JwtAuthGuard` (global authentication), `PermissionsGuard` (RBAC), `EmailVerifiedGuard` |
+| Filters | `HttpExceptionFilter` — standard error envelope |
+| Interceptors | `RequestIdInterceptor` — log correlation |
 | Pipes | Request validation via DTOs (`class-validator`) |
 
----
-## Request Lifecycle
+### Request Lifecycle
 NestJS's **actual** execution order (Express adapter) for an incoming request:
 
 ![Request Lifecycle](./public/designs/request-lifecycle.png)
 
-**Note on order:** Guards run *before* Interceptors and Pipes in NestJS — a common misconception is that Pipes run first. The real order is: **Middleware → Guards → Interceptors (pre-controller) → Pipes → Route Handler → Interceptors (post-controller) → Exception Filters** (filters short-circuit the pipeline whenever an exception is thrown, from any stage).
+**Note on order:** Guards run *before* Interceptors and Pipes — a common misconception is that Pipes run first. The real order is: **Middleware → Guards → Interceptors (pre-controller) → Pipes → Route Handler → Interceptors (post-controller) → Exception Filters** (filters short-circuit the pipeline whenever an exception is thrown, from any stage).
 
----
+## API Design
+- All routes are versioned under `/api/v1`.
+- Errors follow a standard envelope: a stable error code plus a `requestId` for correlation with server-side logs (see the [Request-ID interceptor](#cross-cutting-concerns) and the global exception filter).
+- Auth-related actions are grouped under `/auth`.
+- There is no `/users/:id` route — a user can only ever read or modify their own record via `/users/me`, making ID-based lookup of another user impossible by design (no IDOR surface).
+
+### API Endpoints
+| Method | Path | Auth required | Description |
+|---|---|---|---|
+| POST | /api/v1/auth/register | no | Register a new user. |
+| POST | /api/v1/auth/login | no | Authenticate and issue an access/refresh token pair. |
+| POST | /api/v1/auth/refresh | refresh token | Rotate the refresh token and issue a new access token. Reuse of a revoked token revokes the whole token family. |
+| POST | /api/v1/auth/logout | yes | Revoke the current refresh token. |
+| PATCH | /api/v1/auth/change-password | yes | Change the authenticated user's password and revoke existing refresh tokens. |
+| GET | /api/v1/auth/verify-email | verification token | Verify email ownership via a single-use token. |
+| POST | /api/v1/auth/forgot-password | no | Issue a password-reset token by email (no user enumeration). |
+| POST | /api/v1/auth/reset-password | reset token | Set a new password via a single-use reset token. |
+| GET | /api/v1/users/me | yes | Return the authenticated user's profile. |
+| GET / POST | /api/v1/admin/roles/... | yes (admin) | List, assign, and revoke roles; last-admin protection prevents removing the final admin. |
+| GET | /api/v1/health/live | no | Liveness probe. |
+| GET | /api/v1/health/ready | no | Readiness probe, includes database connectivity check. |
+
+Exact sub-paths under `/api/v1/admin/roles` should be confirmed against `admin.controller.ts`; everything else reflects the controller and DTO structure under [Project Structure](#project-structure).
+
+## Database Design
+![Authentication Flow](./public/db/erd.png)
+
+The Prisma schema defines nine models: `User`, `Role`, `Permission`, `UserRole`, `RolePermission`, `RefreshToken`, `EmailVerificationToken`, `PasswordResetToken`, and `AuditLog` — with explicit keys, constraints, and indexes. Token tables store hashes only, never raw token values. `AuditLog` rows survive user deletion via `SET NULL`, so security history isn't lost when an account is removed.
+
+**Cardinality notes:**
+1. User ↔ Role is many-to-many, through `UserRole`.
+2. Role ↔ Permission is many-to-many, through `RolePermission`.
+3. User → RefreshToken is one-to-many.
+4. User → EmailVerificationToken and User → PasswordResetToken are one-to-many.
+5. User → AuditLog is one-to-many, nullable on the user side (e.g. a failed login on an unknown email).
+
+Two migrations are currently applied: the initial schema and a follow-up adding the auth-related models.
+
+## Security Design
+The threat model was built with **STRIDE** and cross-checked against the **OWASP Top 10**; each control traces a threat → vulnerability → mitigation → implementation chain.
+
+### Security Model
+- Passwords are hashed with bcrypt; cost factor is configurable and validated at startup.
+- High-entropy tokens (refresh, email verification, password reset) are hashed with SHA-256 before storage; raw token values are never stored or logged.
+- Access tokens are JWTs signed with HS256, verified through a Passport JWT strategy — no database round-trip on the hot path.
+- Refresh tokens are rotated on every use. Reuse of an already-revoked refresh token revokes the entire token family for that user, forcing re-authentication.
+- **Default-deny authorization**: the JWT auth guard is registered globally; routes opt out explicitly with `@Public()` rather than opting in to protection.
+- RBAC is enforced by a permissions guard, opt-in per route via `@RequirePermission`; an email-verification guard is opt-in via `@RequireVerifiedEmail`.
+- **Fail-fast configuration**: the app refuses to boot on missing or weak environment variables (validated with Joi).
+- **No speculative abstraction**: Prisma is the only data-access layer — no generic repository interface sitting in front of a single implementation.
+
+### Cross-Cutting Concerns
+- Security headers via helmet.
+- CORS allowlist sourced from configuration (`CORS_ORIGINS`).
+- Rate limiting via `@nestjs/throttler`, with strict limits on `/auth/register` and `/auth/forgot-password` and relaxed defaults elsewhere. This uses in-memory tracking, appropriate for a single-instance deployment; a shared store would be needed to rate-limit correctly across multiple instances, which is out of scope here.
+- A request-ID interceptor tags each request for log correlation.
+- A global exception filter produces the standard error envelope; full error detail is logged server-side, but clients never see stack traces.
+
+### Trust Boundaries
+![Security Boundaries](./public/designs/security/security-boundaries.png)
+![Trust Boundaries](./public/designs/security/trust-boundaries.png)
+
+**Controls at each boundary:**
+1. **Client → Edge:** TLS (production), security headers, CORS allowlist, body size limit.
+2. **Edge → Guards:** token verification with a pinned algorithm; rate limiting before any expensive work.
+3. **Guards → Services:** authorization enforced before business logic runs.
+4. **Pipes → Services:** whitelist DTOs, reject unknown fields (mass-assignment defense).
+5. **Services → DB:** Prisma parameterization; least-privilege DB user.
+6. **App → Secrets:** environment variables via the Config module; never logged.
+7. **App → Logs:** structured, sanitized; never tokens or passwords.
+
 ## Workflows
 ### 1. User Registration
 ```mermaid
@@ -418,7 +475,7 @@ sequenceDiagram
             G-->>C: 401 Unauthorized
         else Password valid
             G->>G: Sign Access Token (JWT, short TTL)
-            G->>G: Generate Refresh Token (opaque or JWT)
+            G->>G: Generate Refresh Token
             G->>DB: Persist Refresh Token (hashed) + metadata
             G->>DB: Write AuditLog (LOGIN_SUCCESS)
             G-->>C: 200 OK {accessToken, refreshToken}
@@ -435,12 +492,12 @@ sequenceDiagram
 
     C->>G: GET /protected (Authorization: Bearer <accessToken>)
     G->>G: JwtAuthGuard extracts token
-    G->>G: Verify signature (JWKS public key) + expiry
+    G->>G: Verify signature (HS256) + expiry
     alt Invalid/expired signature
         G-->>C: 401 Unauthorized
     else Valid signature
         G->>G: Attach decoded claims to request (req.user)
-        G->>G: Proceed to RolesGuard (see RBAC flow)
+        G->>G: Proceed to PermissionsGuard (see RBAC flow)
         G->>DB: (Controller/Service) fetch requested resource
         G-->>C: 200 OK
     end
@@ -449,7 +506,7 @@ sequenceDiagram
 > Access tokens are validated **without a DB round-trip** (stateless) — this keeps the hot path fast. Revocation only affects refresh tokens; a compromised access token remains valid until its short TTL expires (mitigation: keep TTL ≤ 15 min).
 
 ### 5. Authorization (RBAC)
-![Authorization Flow (RBAC)](./public/designs/auth/authorization-flow%20(rbac).png.png)
+![Authorization Flow (RBAC)](./public/designs/auth/authorization-flow%20(rbac).png)
 
 ### 6. Refresh Token Flow
 ```mermaid
@@ -485,7 +542,7 @@ sequenceDiagram
     participant G as Gateway
     participant DB as PostgreSQL
 
-    C->>G: PATCH /users/me/password (auth required)<br/>{currentPassword, newPassword}
+    C->>G: PATCH /auth/change-password (auth required)<br/>{currentPassword, newPassword}
     G->>DB: Fetch user's current hash
     G->>G: bcrypt.compare(currentPassword, hash)
     alt Mismatch
@@ -533,7 +590,7 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     Req[Incoming Request]:::io --> Key[Derive key<br/>IP + route, or userId if authed]:::step
-    Key --> Store[(Rate Limit Store<br/>Redis)]:::store
+    Key --> Store[(Throttler storage<br/>in-memory)]:::store
     Store --> Check{Under limit?}:::step
     Check -->|Yes| Allow[Proceed to Guards/Handler]:::ok
     Check -->|No| Reject[429 Too Many Requests]:::err
@@ -545,12 +602,12 @@ flowchart LR
     classDef err fill:#FCEBEB,stroke:#A32D2D,color:#501313;
 ```
 
-> Applied per-route with different thresholds: strict on `/auth/login`, `/auth/register`, `/auth/forgot-password`; relaxed elsewhere. Requires a **shared store (Redis)**, not in-memory, to work correctly across horizontally scaled instances.
+> Applied per-route with different thresholds: strict on `/auth/register` and `/auth/forgot-password`; relaxed elsewhere. Uses `@nestjs/throttler`'s in-memory store, verified manually (five 201 responses, then a 429). A shared store would be required to rate-limit correctly across multiple horizontally scaled instances — out of scope for this project.
 
 ### 11. Audit Logging
 ```mermaid
 flowchart LR
-    Event[Security Event<br/>login, logout, password change, etc.]:::step --> Interceptor[Audit Interceptor / Service call]:::step
+    Event[Security Event<br/>login, logout, password change, etc.]:::step --> Interceptor[Audit Service call]:::step
     Interceptor --> Enrich[Enrich: userId, IP, userAgent, timestamp, outcome]:::step
     Enrich --> DB[(AuditLog table)]:::store
 
@@ -558,7 +615,7 @@ flowchart LR
     classDef store fill:#FAECE7,stroke:#993C1D,color:#4A1B0C;
 ```
 
-> Audit writes should be **fire-and-forget but reliable** — failures to write an audit log must never block the primary auth flow, but should be logged/alerted separately (e.g., via a queue) if this matters for compliance.
+> `AuditLog.userId` is nullable and set to `NULL` on user deletion, so audit history outlives the account it describes.
 
 ### 12. Health Check
 ```mermaid
@@ -572,38 +629,15 @@ flowchart LR
     classDef store fill:#FAECE7,stroke:#993C1D,color:#4A1B0C;
 ```
 
----
-## Database Design
-![Authentication Flow](./db/erd.png)
+## Testing
+- **Unit tests:** 26 tests across Config, Hasher, User, the exception filter, and the email-verified guard.
+- **End-to-end tests:** 42 tests across 11 files, covering registration, login, refresh rotation and reuse detection, logout idempotency, change-password with session revocation, email verification, password reset, `GET /users/me`, admin role endpoints, the email-verified guard, and security headers/CORS.
+- **Rate limiting:** verified manually against a running dev server (five `201` responses, then `429`) — not covered by an automated test.
+- Approach: e2e tests hit the real database and real HTTP layer; unit tests cover pure logic only. Each e2e file seeds the data it needs and cleans up after itself; the suite runs serially to avoid cross-file interference.
 
-The Prisma schema currently defines: `User`, `Role`, `Permission`, `UserRole`, `RolePermission`, `RefreshToken`, `EmailVerificationToken`, `PasswordResetToken`, and `AuditLog`.
+All tests pass; lint is clean.
 
-**Cardinality notes:**
-1. User ↔ Role is many-to-many, through `UserRole` (a user can have multiple roles; a role can belong to many users).
-2. Role ↔ Permission is many-to-many, through `RolePermission`.
-3. User → RefreshToken is one-to-many.
-4. User → EmailVerificationToken and User → PasswordResetToken are one-to-many.
-5. User → AuditLog is one-to-many (nullable for anonymous events, e.g. a failed login on an unknown email).
-
----
-## Security Boundaries
-![Security Boundaries](./public/designs/security/security-boundaries.png)
-
-### Trust Boundaries
-![Trust Boundaries](./public/designs/security/trust-boundaries.png)
-
-**Controls at each boundary:**
-1. **Client → Edge:** TLS (production), security headers, CORS allowlist, body size limit.
-2. **Edge → Guards:** token verification with pinned algorithm; rate limiting before any expensive work.
-3. **Guards → Services:** authorization enforced before business logic runs.
-4. **Pipes → Services:** whitelist DTOs, reject unknown fields (mass-assignment defense).
-5. **Services → DB:** Prisma parameterization; least-privilege DB user.
-6. **App → Secrets:** environment variables via Config module; never logged.
-7. **App → Logs:** structured, sanitized; never tokens or passwords.
-
----
 ## License
-**PROPRIETARY LICENSE**
-© 2026 Authentication Gateway. All Rights Reserved.
+Proprietary — All rights reserved. Declared as `"license": "UNLICENSED"` in `package.json`.
 
 This project is a university capstone project. This software and associated documentation are proprietary and confidential. No part may be reproduced, distributed, or transmitted in any form without prior written permission from the author.
