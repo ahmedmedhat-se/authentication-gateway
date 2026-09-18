@@ -300,4 +300,63 @@ export class AuthService {
       userAgent: ctx.userAgent,
     });
   }
+
+  async forgotPassword(email: string, ctx: RequestContext): Promise<void> {
+    const user = await this.userService.findByEmail(email);
+    if (!user) {
+      return;
+    }
+
+    let rawToken: string;
+    try {
+      rawToken = await this.tokenService.createPasswordResetToken(user.id);
+    } catch {
+      return;
+    }
+
+    await this.auditService.record({
+      event: AuditEvent.PASSWORD_RESET_REQUESTED,
+      userId: user.id,
+      ipAddress: ctx.ip,
+      userAgent: ctx.userAgent,
+    });
+
+    try {
+      await this.mailer.sendPasswordResetEmail(user.email, rawToken);
+    } catch {
+      return;
+    }
+  }
+
+  async resetPassword(
+    token: string,
+    newPassword: string,
+    ctx: RequestContext,
+  ): Promise<void> {
+    let userId: string;
+    try {
+      userId = await this.tokenService.consumePasswordResetToken(token);
+    } catch {
+      throw new BadRequestException('AUTH_INVALID_RESET_TOKEN');
+    }
+
+    const newHash = await this.hasher.hash(newPassword);
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.userService.updatePassword(userId, newHash, tx);
+      await tx.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await this.auditService.record(
+        {
+          event: AuditEvent.PASSWORD_RESET_COMPLETED,
+          userId,
+          ipAddress: ctx.ip,
+          userAgent: ctx.userAgent,
+        },
+        tx,
+      );
+    });
+  }
 }

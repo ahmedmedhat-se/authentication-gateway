@@ -11,9 +11,9 @@ export const validationSchema = Joi.object({
 
   JWT_SECRET: Joi.string().min(32).required(),
 
-  JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
+  JWT_ACCESS_EXPIRES_IN: Joi.number().min(60).default(900),
 
-  JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
+  JWT_REFRESH_EXPIRES_IN: Joi.number().min(3600).default(604800),
 
   BCRYPT_COST: Joi.number().min(10).max(15).default(12),
 
@@ -32,4 +32,8 @@ export const validationSchema = Joi.object({
   MAIL_PASS: Joi.string().optional(),
 
   MAIL_SECURE: Joi.boolean().optional(),
+
+  THROTTLE_TTL_MS: Joi.number().min(1000).default(60000),
+
+  THROTTLE_LIMIT: Joi.number().min(1).default(60),
 });

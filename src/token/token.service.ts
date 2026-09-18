@@ -149,6 +149,46 @@ export class TokenService {
     });
   }
 
+  async createPasswordResetToken(
+    userId: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<string> {
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = this.hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    await client.passwordResetToken.deleteMany({
+      where: { userId, usedAt: null },
+    });
+
+    await client.passwordResetToken.create({
+      data: { userId, tokenHash, expiresAt },
+    });
+
+    return rawToken;
+  }
+
+  async consumePasswordResetToken(rawToken: string): Promise<string> {
+    const tokenHash = this.hashToken(rawToken);
+
+    return this.prisma.$transaction(async (tx) => {
+      const token = await tx.passwordResetToken.findUnique({
+        where: { tokenHash },
+      });
+
+      if (!token || token.usedAt !== null || token.expiresAt < new Date()) {
+        throw new Error('INVALID_RESET_TOKEN');
+      }
+
+      await tx.passwordResetToken.update({
+        where: { id: token.id },
+        data: { usedAt: new Date() },
+      });
+
+      return token.userId;
+    });
+  }
+
   private hashToken(rawToken: string): string {
     return createHash('sha256').update(rawToken).digest('hex');
   }

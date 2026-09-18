@@ -19,16 +19,24 @@ import { RefreshDto } from './dto/refresh.dto';
 import { LogoutDto } from './dto/logout.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
-import { AuthenticatedUser } from './types/authenticated-user';
+import { RequireVerifiedEmail } from './decorators/require-verified-email.decorator';
+import type { AuthenticatedUser } from './types/authenticated-user';
 import { RequestContext } from '../common/types/request-context';
+import {
+  StrictThrottle,
+  AuthThrottle,
+} from '../common/decorators/throttle.decorators';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @StrictThrottle()
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async register(
@@ -43,6 +51,7 @@ export class AuthController {
   }
 
   @Public()
+  @AuthThrottle()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
@@ -53,6 +62,7 @@ export class AuthController {
   }
 
   @Public()
+  @AuthThrottle()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(
@@ -63,6 +73,7 @@ export class AuthController {
   }
 
   @Public()
+  @AuthThrottle()
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@Body() dto: LogoutDto, @Req() req: Request): Promise<void> {
@@ -70,6 +81,7 @@ export class AuthController {
   }
 
   @Post('change-password')
+  @RequireVerifiedEmail()
   @HttpCode(HttpStatus.NO_CONTENT)
   async changePassword(
     @Body() dto: ChangePasswordDto,
@@ -85,6 +97,7 @@ export class AuthController {
   }
 
   @Public()
+  @AuthThrottle()
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   async verifyEmail(
@@ -93,6 +106,35 @@ export class AuthController {
   ): Promise<{ emailVerified: true }> {
     await this.authService.verifyEmail(dto.token, this.context(req));
     return { emailVerified: true };
+  }
+
+  @Public()
+  @StrictThrottle()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+    @Req() req: Request,
+  ): Promise<{ message: string }> {
+    await this.authService.forgotPassword(dto.email, this.context(req));
+    return {
+      message: 'If the account exists, a reset email has been sent.',
+    };
+  }
+
+  @Public()
+  @AuthThrottle()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+    @Req() req: Request,
+  ): Promise<void> {
+    await this.authService.resetPassword(
+      dto.token,
+      dto.newPassword,
+      this.context(req),
+    );
   }
 
   private context(req: Request): RequestContext {
